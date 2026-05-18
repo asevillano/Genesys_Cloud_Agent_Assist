@@ -20,24 +20,37 @@ a built-in web simulator plays the role of the Genesys agent desktop and the
 5. Every turn, suggestion and the final summary are persisted in **Cosmos DB**
    (partition key `/conversationId`).
 
-```
-┌────────────────────────────────────────────────────────────────────────┐
-│  Browser (agent desktop simulator)                                     │
-│  ┌─ left: call panel + push-to-talk ──┐  ┌─ right: <iframe> Agent ──┐ │
-│  │  /  served by FastAPI              │  │ Assist (Client App sim)  │ │
-│  └────────────────┬───────────────────┘  └────────────┬─────────────┘ │
-│   binary µ-law 8k │ AudioHook v2 (WS)                 │ WS subscribe  │
-└───────────────────┼───────────────────────────────────┼───────────────┘
-                    ▼                                   ▼
-            /ws/audiohook                       /ws/assist/{convId}
-                    │                                   ▲
-                    ▼                                   │
-        ┌──────────────────────┐    deltas              │
-        │ FastAPI session mgr  │ ──────────────────────►│
-        │  • RealtimeSTT × 2   │
-        │  • Foundry runs.stream                       
-        │  • Cosmos persistence                        
-        └──────────────────────┘
+### Simulator architecture
+
+```mermaid
+flowchart TB
+    subgraph Browser["Browser (agent desktop simulator)"]
+        direction LR
+        SIM["Call panel + push-to-talk<br/><code>/</code> (FastAPI)"]
+        AA["Agent Assist iframe<br/>(Client App simulator)"]
+    end
+
+    subgraph Backend["FastAPI backend"]
+        SM["Session manager<br/>(per-conversation state)"]
+        STT["Realtime STT × 2<br/>(customer + agent)"]
+        FA["Foundry agent<br/>(Responses API)"]
+        SUM["Wrap-up summary<br/>(Azure OpenAI chat)"]
+    end
+
+    AOAI[(Azure OpenAI<br/>Realtime + chat)]
+    FOUNDRY[(Azure AI Foundry<br/>agent + KB)]
+    COSMOS[(Cosmos DB<br/>/conversationId)]
+
+    SIM -- "µ-law 8 kHz interleaved<br/>WS /ws/audiohook" --> SM
+    AA  -- "WS /ws/assist/{convId}<br/>(subscribe)" --> SM
+    SM  --> STT
+    SM  --> FA
+    SM  --> SUM
+    STT --> AOAI
+    FA  --> FOUNDRY
+    SUM --> AOAI
+    SM  -- "turns, suggestions, summary" --> COSMOS
+    SM  -- "transcript + suggestion deltas" --> AA
 ```
 
 ## Project layout
@@ -339,6 +352,43 @@ Both pieces are already implemented in the simulator (`/ws/audiohook` and
 need to (a) make the AudioHook endpoint Genesys-compliant, (b) register the
 Client App with the right URL template, and (c) wire OAuth so the iframe can
 read interaction context. The next sections detail each step.
+
+### Target architecture in production
+
+```mermaid
+flowchart TB
+    subgraph GC["Genesys Cloud (PureCloud)"]
+        EDGE["Genesys Edge<br/>(media + AudioHook client)"]
+        DESKTOP["Agent desktop<br/>(Premium Client App iframe)"]
+        OAUTH["OAuth clients<br/>(Client Credentials +<br/>Implicit / Code Auth)"]
+    end
+
+    subgraph ACA["Azure Container Apps (your tenant)"]
+        WSAH["/ws/audiohook<br/>(HMAC-verified WSS)"]
+        WSAA["/agent-assist + /ws/assist/{convId}<br/>(Client App UI + pub/sub)"]
+        SM2["Session manager"]
+    end
+
+    AOAI2[(Azure OpenAI<br/>Realtime + chat)]
+    FOUNDRY2[(Azure AI Foundry<br/>agent + KB)]
+    COSMOS2[(Cosmos DB<br/>/conversationId)]
+
+    EDGE -- "µ-law 8 kHz stereo<br/>AudioHook v2 (WSS)" --> WSAH
+    DESKTOP -- "iframe URL with<br/>{{gcConversationId}}" --> WSAA
+    DESKTOP -- "Client App SDK<br/>(token, lifecycle)" --> OAUTH
+    WSAH --> SM2
+    WSAA --> SM2
+    SM2 --> AOAI2
+    SM2 --> FOUNDRY2
+    SM2 --> COSMOS2
+    SM2 -- "transcript +<br/>suggestion deltas" --> WSAA
+```
+
+The key difference vs. the simulator is that **Genesys Edge** is now the only
+audio source (no in-browser microphone) and the **agent desktop** loads
+`/agent-assist` as a Premium Client App iframe instead of being served from
+`/`. The same `conversationId` flows through both paths, so the backend
+session manager binds them together with no changes.
 
 ### 1. AudioHook Monitor integration
 
