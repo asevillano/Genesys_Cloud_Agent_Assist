@@ -37,8 +37,8 @@ flowchart TB
         SUM["Wrap-up summary<br/>(Azure OpenAI chat)"]
     end
 
-    AOAI[(Azure OpenAI<br/>Realtime + chat)]
-    FOUNDRY[(Azure AI Foundry<br/>agent + KB)]
+    AOAI["Azure OpenAI<br/>Realtime + chat"]
+    FOUNDRY["Azure AI Foundry<br/>agent + KB"]
     COSMOS[(Cosmos DB<br/>/conversationId)]
 
     SIM -- "µ-law 8 kHz interleaved<br/>WS /ws/audiohook" --> SM
@@ -369,8 +369,8 @@ flowchart TB
         SM2["Session manager"]
     end
 
-    AOAI2[(Azure OpenAI<br/>Realtime + chat)]
-    FOUNDRY2[(Azure AI Foundry<br/>agent + KB)]
+    AOAI2["Azure OpenAI<br/>Realtime + chat"]
+    FOUNDRY2["Azure AI Foundry<br/>agent + KB"]
     COSMOS2[(Cosmos DB<br/>/conversationId)]
 
     EDGE -- "µ-law 8 kHz stereo<br/>AudioHook v2 (WSS)" --> WSAH
