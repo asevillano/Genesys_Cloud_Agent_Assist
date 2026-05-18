@@ -78,13 +78,21 @@ uvicorn backend.main:app --reload --port 8000
 
 Then open <http://localhost:8000>:
 
-1. Pick the **mic** and the **Foundry agent**.
-2. Click **▶ Start call** — the iframe loads the Agent Assist UI for the
-   freshly minted `conversationId` and the AudioHook session opens.
+1. Pick the **mic** and the **Foundry agent**. The Agent Assist panels
+   (**Live transcript** and **Suggestions & summary**) are visible from the
+   start with a placeholder message until a call begins.
+2. Click **▶ Start call**. The button changes to **⏳ Connecting call…**
+   while the AudioHook session is being established, and to
+   **● Connected** once the backend has confirmed the `opened` handshake.
+   At that point the iframe rebinds to the freshly minted `conversationId`.
 3. Hold **🎤 Customer** while you speak as the customer; hold **🎤 Agent**
    while you speak as the human agent.
 4. Suggestions stream into the right panel as soon as a customer turn is final.
 5. Click **📝 Generate summary** to produce the wrap-up.
+
+The UI uses a **Genesys Cloud light theme** (white panels, navy top bar,
+Genesys orange accent) so it visually matches the real agent desktop the
+Client App would be embedded into.
 
 ## Environment variables
 
@@ -305,6 +313,12 @@ existing database and container.
   two clean channels. Releasing a button sends silence on that channel; the
   Realtime STT VAD handles end-of-turn detection naturally.
 - PII masking has been intentionally removed (per project scope).
+- **Foundry agent versions are immutable.** `responses.create(..., agent_reference={"name": AGENT_NAME})`
+  invokes the *latest published version* of the agent. If you edit the agent
+  in the Foundry portal (instructions, knowledge / file search, tools) you
+  must **Save as new version** for the change to be served by the Responses
+  API. Until then the Playground will show your draft while the simulator
+  keeps serving the previous version.
 
 ---
 
