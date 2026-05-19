@@ -126,6 +126,10 @@ class ConversationSession:
         if not is_final:
             return
         self.turns.append({"channel": channel, "text": text})
+        log.info(
+            "[conv %s] FINAL turn #%d (%s): %r",
+            self.conversation_id, len(self.turns), channel, text,
+        )
         turn_id = await cosmos_store.save_turn(self.conversation_id, channel, text)
         # Trigger Foundry only on customer final turns
         if channel == "customer":
@@ -139,6 +143,11 @@ class ConversationSession:
             labeled = "\n".join(
                 f"[{'Customer' if t['channel'] == 'customer' else 'Agent'}]: {t['text']}"
                 for t in pending
+            )
+            log.info(
+                "[conv %s] -> Foundry agent %r (%d turn(s), %d chars):\n%s",
+                self.conversation_id, self.agent_name,
+                len(pending), len(labeled), labeled,
             )
             # cancel previous in-flight run if a new customer turn arrives
             if self._pending_run and not self._pending_run.done():
@@ -159,6 +168,10 @@ class ConversationSession:
                 await self._broadcast({"type": "suggestion.delta", "text": delta})
 
             async def on_completed(full: str) -> None:
+                log.info(
+                    "[conv %s] <- Foundry suggestion (%d chars):\n%s",
+                    self.conversation_id, len(full), full,
+                )
                 await self._broadcast({"type": "suggestion.completed", "text": full})
                 await cosmos_store.save_suggestion(self.conversation_id, full, turn_id)
 

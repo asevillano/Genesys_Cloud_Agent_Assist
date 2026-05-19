@@ -18,6 +18,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import Optional
 
@@ -32,14 +33,20 @@ from .config import settings
 from .foundry_agent import FoundryAgentClient
 from .stt_realtime import warm_up as stt_warm_up
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s %(levelname)s %(name)s | %(message)s",
-)
-log = logging.getLogger("app")
-
 ROOT = Path(__file__).resolve().parent.parent
 FRONTEND = ROOT / "frontend"
+LOG_DIR = ROOT / "logs"
+LOG_DIR.mkdir(exist_ok=True)
+
+_log_fmt = logging.Formatter("%(asctime)s %(levelname)s %(name)s | %(message)s")
+_console = logging.StreamHandler()
+_console.setFormatter(_log_fmt)
+_file = RotatingFileHandler(
+    LOG_DIR / "app.log", maxBytes=5 * 1024 * 1024, backupCount=5, encoding="utf-8"
+)
+_file.setFormatter(_log_fmt)
+logging.basicConfig(level=logging.INFO, handlers=[_console, _file])
+log = logging.getLogger("app")
 
 app = FastAPI(title="Genesys Cloud Agent Assist (Simulator)")
 app.mount("/static", StaticFiles(directory=str(FRONTEND)), name="static")

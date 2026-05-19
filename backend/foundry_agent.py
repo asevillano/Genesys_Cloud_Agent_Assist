@@ -108,6 +108,11 @@ class FoundryAgentClient:
         openai = self._openai
         collected: list[str] = []
 
+        log.info(
+            "responses.create agent=%r conversation=%s input_len=%d",
+            agent_name, conversation_id, len(content),
+        )
+
         def _run() -> str:
             try:
                 stream = openai.responses.create(
