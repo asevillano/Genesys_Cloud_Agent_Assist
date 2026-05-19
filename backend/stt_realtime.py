@@ -31,6 +31,18 @@ def _get_aad_token() -> str:
     return _credential.get_token(_AAD_SCOPE).token
 
 
+async def warm_up() -> None:
+    """Pre-acquire the AAD token used by Realtime STT so the first call
+    doesn't pay the cold token-cache cost (~1-2 s)."""
+    if settings.aoai_key:
+        return  # api-key auth: no token to warm
+    try:
+        await asyncio.to_thread(_get_aad_token)
+        log.info("Realtime STT AAD token pre-warmed.")
+    except Exception as e:
+        log.warning("Realtime STT warm-up failed: %s", e)
+
+
 TranscriptCallback = Callable[[str, str, bool], Awaitable[None]]
 
 

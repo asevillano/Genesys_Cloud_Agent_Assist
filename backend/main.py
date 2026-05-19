@@ -30,6 +30,7 @@ from fastapi.staticfiles import StaticFiles
 from . import audiohook, cosmos_store, session_manager
 from .config import settings
 from .foundry_agent import FoundryAgentClient
+from .stt_realtime import warm_up as stt_warm_up
 
 logging.basicConfig(
     level=logging.INFO,
@@ -56,6 +57,20 @@ async def _startup() -> None:
     except Exception as e:
         log.error("Foundry init failed: %s", e)
         _agent_client = None
+    # Pre-warm AAD tokens / Foundry list so the first "Start call" doesn't
+    # pay the cold cache cost (~1-2 s per scope).
+    async def _warm() -> None:
+        tasks = [stt_warm_up()]
+        if _agent_client is not None:
+            # Touching list_agents forces the OpenAI client / AAD token used
+            # for Foundry to materialise before the user clicks Start.
+            tasks.append(_agent_client.list_agents())
+        try:
+            await asyncio.gather(*tasks, return_exceptions=True)
+            log.info("Startup warm-up done.")
+        except Exception as e:
+            log.warning("Startup warm-up error: %s", e)
+    asyncio.create_task(_warm())
 
 
 def _require_agent_client() -> FoundryAgentClient:

@@ -165,11 +165,26 @@ button:disabled { opacity: 0.45; cursor: not-allowed; }
   margin-top: 8px;
   border: 1px solid transparent;
   color: #ffffff;
+  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.18), 0 1px 2px rgba(0, 0, 0, 0.08);
+  transition: transform 60ms ease, box-shadow 60ms ease, filter 60ms ease;
 }
 .ptt.customer { background: var(--customer); border-color: var(--customer); }
 .ptt.agent    { background: var(--agent);    border-color: var(--agent); }
-.ptt.active   { box-shadow: 0 0 0 3px rgba(0,0,0,0.08) inset; transform: scale(0.99); }
-.ptt:disabled { opacity: 0.45; }
+
+/* Pressed state — clearly "sunken" */
+.ptt.active,
+.ptt:active:not(:disabled) {
+  transform: translateY(2px) scale(0.97);
+  filter: brightness(0.82);
+  box-shadow:
+    inset 0 3px 6px rgba(0, 0, 0, 0.35),
+    inset 0 0 0 2px rgba(255, 255, 255, 0.25);
+}
+.ptt.active:focus-visible,
+.ptt:active:focus-visible {
+  outline: none;
+}
+.ptt:disabled { opacity: 0.45; box-shadow: none; }
 
 .status-dot {
   display: inline-block;

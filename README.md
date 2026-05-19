@@ -13,8 +13,12 @@ a built-in web simulator plays the role of the Genesys agent desktop and the
 2. The backend deinterleaves, upsamples per channel to **PCM16 24 kHz** and feeds
    each channel into a dedicated **Azure OpenAI Realtime** session
    (`gpt-4o-mini-transcribe`).
-3. Final **customer** transcriptions are sent to an **Azure AI Foundry Agent**
-   (`runs.stream`); deltas are pushed live to the Agent Assist UI.
+3. Final **customer** transcriptions trigger an **Azure AI Foundry Agent** run.
+   Every turn since the previous trigger (any agent replies plus the new
+   customer turn) is sent **labeled with the speaker** (`[Customer]: …` /
+   `[Agent]: …`) so the model has the full conversational context — not just
+   the customer side — and can avoid suggesting something the human agent
+   has already said. Suggestion deltas are pushed live to the Agent Assist UI.
 4. On call wrap-up, an Azure OpenAI chat model produces a **summary** plus a
    list of detected **categories**.
 5. Every turn, suggestion and the final summary are persisted in **Cosmos DB**

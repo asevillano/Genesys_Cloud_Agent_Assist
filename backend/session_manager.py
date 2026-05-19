@@ -44,17 +44,37 @@ class ConversationSession:
         self.subscribers: set[WebSocket] = set()
         self.turns: list[dict] = []  # {channel, text}
         self._pending_run: Optional[asyncio.Task] = None
+        # Index of the next turn that still has to be sent to the Foundry
+        # agent. We label every turn with its speaker so the model has the
+        # full conversational context (not just the customer side).
+        self._last_sent_turn_idx: int = 0
 
         self._stt_customer = RealtimeSTT("customer", language, self._on_transcript)
         self._stt_agent = RealtimeSTT("agent", language, self._on_transcript)
 
     async def start(self) -> None:
-        self.foundry_conv_id = await self.agent_client.create_conversation()
-        await asyncio.gather(self._stt_customer.start(), self._stt_agent.start())
-        await cosmos_store.save_conversation_started(self.conversation_id, self.agent_name)
-        await self._broadcast({"type": "session.started",
-                               "conversationId": self.conversation_id,
-                               "agentName": self.agent_name})
+        # Critical path — the AudioHook client is blocked on this until we
+        # send back the `opened` reply, so we parallelise everything we can:
+        #   * Foundry create_conversation (REST)  ~300-800 ms
+        #   * 2 × Azure OpenAI Realtime WS connect ~300-800 ms each
+        # AAD tokens for both scopes are pre-warmed at app startup.
+        async def _create_conv() -> None:
+            self.foundry_conv_id = await self.agent_client.create_conversation()
+
+        await asyncio.gather(
+            _create_conv(),
+            self._stt_customer.start(),
+            self._stt_agent.start(),
+        )
+        # Non-critical — fire-and-forget so we don't delay the `opened` reply.
+        asyncio.create_task(
+            cosmos_store.save_conversation_started(self.conversation_id, self.agent_name)
+        )
+        asyncio.create_task(self._broadcast({
+            "type": "session.started",
+            "conversationId": self.conversation_id,
+            "agentName": self.agent_name,
+        }))
 
     # ---- Audio ingestion -------------------------------------------------
     async def feed_customer_audio(self, pcm16_24k: bytes) -> None:
@@ -109,15 +129,26 @@ class ConversationSession:
         turn_id = await cosmos_store.save_turn(self.conversation_id, channel, text)
         # Trigger Foundry only on customer final turns
         if channel == "customer":
+            # Build a labeled block with every turn that hasn't been sent to
+            # the agent yet (any agent turns that happened since the last
+            # trigger, plus the new customer turn). This gives the model the
+            # full conversation context — not only the customer's side — so
+            # it can suggest in light of what the human agent already said.
+            pending = self.turns[self._last_sent_turn_idx:]
+            self._last_sent_turn_idx = len(self.turns)
+            labeled = "\n".join(
+                f"[{'Customer' if t['channel'] == 'customer' else 'Agent'}]: {t['text']}"
+                for t in pending
+            )
             # cancel previous in-flight run if a new customer turn arrives
             if self._pending_run and not self._pending_run.done():
                 self._pending_run.cancel()
             self._pending_run = asyncio.create_task(
-                self._run_agent(text, turn_id)
+                self._run_agent(labeled, turn_id)
             )
 
     # ---- Foundry streaming run ------------------------------------------
-    async def _run_agent(self, customer_text: str, turn_id: str) -> None:
+    async def _run_agent(self, input_text: str, turn_id: str) -> None:
         assert self.foundry_conv_id is not None
         try:
             await self._broadcast({"type": "suggestion.started"})
@@ -132,7 +163,7 @@ class ConversationSession:
                 await cosmos_store.save_suggestion(self.conversation_id, full, turn_id)
 
             await self.agent_client.ask(
-                self.agent_name, self.foundry_conv_id, customer_text,
+                self.agent_name, self.foundry_conv_id, input_text,
                 on_delta=on_delta, on_completed=on_completed,
             )
         except asyncio.CancelledError:
