@@ -193,6 +193,16 @@ class ConversationSession:
         await self._broadcast(payload)
         return {"summary": text, "categories": cats}
 
+    async def stop_audio(self) -> None:
+        """Halt the Realtime STT sessions but keep transcript + Foundry state
+        in memory so the UI can still trigger /api/wrapup."""
+        await asyncio.gather(
+            self._stt_customer.close(),
+            self._stt_agent.close(),
+            return_exceptions=True,
+        )
+        await self._broadcast({"type": "session.closed"})
+
     async def close(self) -> None:
         try:
             await asyncio.gather(

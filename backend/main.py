@@ -126,7 +126,12 @@ async def api_wrapup(conv_id: str) -> dict:
     sess = session_manager.get(conv_id)
     if sess is None:
         raise HTTPException(404, "No active session")
-    return await sess.wrap_up()
+    result = await sess.wrap_up()
+    # Once the wrap-up summary has been produced and persisted, tear the
+    # session down. The transcript is no longer needed in memory and a new
+    # call will create a fresh session with a new conversationId.
+    await session_manager.drop(conv_id)
+    return result
 
 
 @app.get("/api/conversations/{conv_id}")
@@ -265,8 +270,12 @@ async def ws_audiohook(
         pass
 
 
-# Optional: allow explicit teardown
+# Stop audio capture but KEEP the session in memory so the UI can still
+# request /api/wrapup. The session is fully torn down after wrap-up (or
+# implicitly when a new Start call creates a new conversationId).
 @app.post("/api/sessions/{conv_id}/close")
 async def api_close(conv_id: str) -> JSONResponse:
-    await session_manager.drop(conv_id)
-    return JSONResponse({"status": "closed"})
+    sess = session_manager.get(conv_id)
+    if sess is not None:
+        await sess.stop_audio()
+    return JSONResponse({"status": "audio-stopped"})

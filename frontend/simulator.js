@@ -231,6 +231,12 @@
     $("btnStart").disabled = true;
     $("btnStart").textContent = "⏳ Connecting call…";
 
+    // Reset the agent-assist iframe to its placeholder state for the new
+    // call. We do this here (and NOT on End call) so that the previous
+    // call's transcript + suggestions + summary remain visible until the
+    // user explicitly starts a new conversation.
+    try { $("assist").src = "/agent-assist"; $("iframeUrl").textContent = ""; } catch (e) {}
+
     // Audio first so mic permission is requested before WS open
     await startAudio($("micSelect").value);
 
@@ -302,8 +308,10 @@
     $("btnEnd").disabled = true;
     $("pttCustomer").disabled = true;
     $("pttAgent").disabled = true;
-    // Reset the agent-assist iframe to its placeholder state
-    try { $("assist").src = "/agent-assist"; $("iframeUrl").textContent = ""; } catch (e) {}
+    // NOTE: We intentionally do NOT reset the agent-assist iframe here. The
+    // transcript + suggestions + summary stay visible after End call so the
+    // user can still trigger Generate summary. The iframe is reset on the
+    // next Start call.
   }
 
   function setStatus(live) {
