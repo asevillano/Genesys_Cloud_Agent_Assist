@@ -46,9 +46,9 @@ def init() -> None:
         if settings.cosmos_key:
             _client = CosmosClient(settings.cosmos_endpoint, credential=settings.cosmos_key)
         else:
-            from azure.identity import DefaultAzureCredential
-            log.info("No COSMOS_KEY set — using DefaultAzureCredential for Cosmos DB.")
-            _client = CosmosClient(settings.cosmos_endpoint, credential=DefaultAzureCredential())
+            from azure.identity import AzureCliCredential
+            log.info("No COSMOS_KEY set — using AzureCliCredential for Cosmos DB.")
+            _client = CosmosClient(settings.cosmos_endpoint, credential=AzureCliCredential(process_timeout=30))
         db = _client.create_database_if_not_exists(id=settings.cosmos_database)
         _container = db.create_container_if_not_exists(
             id=settings.cosmos_container,
@@ -69,8 +69,14 @@ async def _upsert(doc: dict[str, Any]) -> None:
         log.warning("Cosmos upsert failed: %s", e)
 
 
-async def save_turn(conversation_id: str, channel: str, text: str) -> str:
-    turn_id = str(uuid.uuid4())
+async def save_turn(conversation_id: str, channel: str, text: str,
+                    turn_id: str | None = None) -> str:
+    """Persist a turn. If ``turn_id`` is supplied it is used as-is, otherwise
+    a fresh uuid is generated. The id is returned regardless so callers can
+    link the turn to follow-up documents (suggestions) without awaiting the
+    network round-trip.
+    """
+    turn_id = turn_id or str(uuid.uuid4())
     await _upsert({
         "id": turn_id,
         "conversationId": conversation_id,

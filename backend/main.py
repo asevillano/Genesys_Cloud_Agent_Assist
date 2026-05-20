@@ -25,7 +25,7 @@ from typing import Optional
 from fastapi import (
     FastAPI, HTTPException, Header, WebSocket, WebSocketDisconnect,
 )
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from . import audiohook, cosmos_store, session_manager
@@ -72,6 +72,10 @@ async def _startup() -> None:
             # Touching list_agents forces the OpenAI client / AAD token used
             # for Foundry to materialise before the user clicks Start.
             tasks.append(_agent_client.list_agents())
+            # Prime the agent_reference resolution path on the Foundry side
+            # so the first real suggestion of the first call is fast.
+            if settings.agent_name:
+                tasks.append(_agent_client.warm_up_agent(settings.agent_name))
         try:
             await asyncio.gather(*tasks, return_exceptions=True)
             log.info("Startup warm-up done.")
@@ -95,6 +99,14 @@ async def index() -> FileResponse:
 @app.get("/agent-assist")
 async def agent_assist() -> FileResponse:
     return FileResponse(FRONTEND / "agent-assist.html")
+
+
+@app.get("/favicon.ico", include_in_schema=False)
+async def favicon() -> Response:
+    fav = FRONTEND / "favicon.ico"
+    if fav.exists():
+        return FileResponse(fav, media_type="image/x-icon")
+    return Response(status_code=204)
 
 
 # ───────────────────────── REST API ──────────────────────

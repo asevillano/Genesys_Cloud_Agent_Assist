@@ -17,7 +17,7 @@ import logging
 from typing import Awaitable, Callable, Optional
 
 from azure.ai.projects import AIProjectClient
-from azure.identity import DefaultAzureCredential
+from azure.identity import AzureCliCredential
 
 from .config import settings
 
@@ -35,7 +35,7 @@ class FoundryAgentClient:
             raise RuntimeError("PROJECT_ENDPOINT is not configured.")
         self._project = AIProjectClient(
             endpoint=settings.project_endpoint,
-            credential=DefaultAzureCredential(),
+            credential=AzureCliCredential(process_timeout=30),
         )
         # The OpenAI client returned here is already wired to the Foundry
         # project endpoint and uses the same AAD credential.
@@ -89,6 +89,44 @@ class FoundryAgentClient:
         except Exception as e:
             log.warning("list_agents failed: %s", e)
             return []
+
+    # ---- Warm-up --------------------------------------------------------
+    async def warm_up_agent(self, agent_name: str) -> None:
+        """Prime the server-side ``agent_reference`` resolution path.
+
+        The first ``responses.create`` for a given agent typically pays a
+        version lookup / instruction load on the Foundry side (~0.5-1 s).
+        Sending one standalone (no ``conversation`` parameter) request at
+        startup pre-warms that cache for the whole app lifetime without
+        polluting any user conversation.
+        """
+        if not agent_name:
+            return
+        openai = self._openai
+
+        def _run() -> None:
+            try:
+                stream = openai.responses.create(
+                    extra_body={
+                        "agent_reference": {
+                            "name": agent_name,
+                            "type": "agent_reference",
+                        }
+                    },
+                    input=" ",
+                    stream=True,
+                )
+                with stream as events:
+                    for _ in events:
+                        pass
+            except Exception as e:
+                log.debug("warm_up_agent _run: %s", e)
+
+        try:
+            await asyncio.to_thread(_run)
+            log.info("Foundry agent %r warmed up.", agent_name)
+        except Exception as e:
+            log.warning("warm_up_agent failed: %s", e)
 
     # ---- Streaming response ---------------------------------------------
     async def ask(

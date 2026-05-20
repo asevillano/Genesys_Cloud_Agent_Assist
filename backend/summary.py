@@ -5,7 +5,7 @@ import asyncio
 import logging
 from typing import List, Tuple
 
-from azure.identity import DefaultAzureCredential, get_bearer_token_provider
+from azure.identity import AzureCliCredential, get_bearer_token_provider
 from openai import AzureOpenAI
 
 from .config import settings
@@ -28,9 +28,9 @@ def _get_client() -> AzureOpenAI | None:
             api_version=settings.aoai_api_version,
         )
     else:
-        log.info("No AZURE_OPENAI_API_KEY set — using DefaultAzureCredential for Azure OpenAI.")
+        log.info("No AZURE_OPENAI_API_KEY set — using AzureCliCredential for Azure OpenAI.")
         token_provider = get_bearer_token_provider(
-            DefaultAzureCredential(),
+            AzureCliCredential(process_timeout=30),
             "https://cognitiveservices.azure.com/.default",
         )
         _client = AzureOpenAI(
@@ -60,9 +60,13 @@ async def generate_summary(turns: list[dict], categories: list[str]) -> Tuple[st
     prompt = (
         "Analyse the following contact-center conversation and produce:\n"
         "1. **Summary**: 3-4 concise sentences with the main topics.\n"
-        f"2. **Categories**: pick only from this list: {cats}. "
-        "If none apply, say 'Ninguna categoría aplicable'.\n\n"
-        "Format:\n**Resumen:**\n<text>\n\n**Categorías detectadas:**\n<list>\n\n"
+        f"2. **Categories**: pick only from this list (keep the category names verbatim, in their original language): {cats}. "
+        "If none apply, write the equivalent of 'No applicable category' in the conversation's language.\n\n"
+        "IMPORTANT: Write the entire response (section headings and body) in the SAME LANGUAGE as the CONVERSATION below. "
+        "Do not translate. If the conversation is in English, respond in English; if in Spanish, respond in Spanish; etc.\n\n"
+        "Use this structure, translating the two headings into the conversation's language "
+        "(e.g. English: 'Summary' / 'Detected categories'; Spanish: 'Resumen' / 'Categorías detectadas'):\n"
+        "**<Summary heading>:**\n<text>\n\n**<Categories heading>:**\n<list>\n\n"
         f"---\nCONVERSATION:\n{convo}\n---"
     )
 
@@ -71,7 +75,10 @@ async def generate_summary(turns: list[dict], categories: list[str]) -> Tuple[st
             model=settings.aoai_summary_deployment,
             messages=[
                 {"role": "system",
-                 "content": "You are an expert at analysing and summarising contact-center conversations."},
+                 "content": (
+                     "You are an expert at analysing and summarising contact-center conversations. "
+                     "Always reply in the same language as the conversation you are given."
+                 )},
                 {"role": "user", "content": prompt},
             ],
             temperature=0.3,

@@ -14,20 +14,20 @@ import logging
 from typing import Awaitable, Callable, Optional
 
 import websockets
-from azure.identity import DefaultAzureCredential
+from azure.identity import AzureCliCredential
 
 from .config import settings
 
 log = logging.getLogger(__name__)
 
 _AAD_SCOPE = "https://cognitiveservices.azure.com/.default"
-_credential: DefaultAzureCredential | None = None
+_credential: AzureCliCredential | None = None
 
 
 def _get_aad_token() -> str:
     global _credential
     if _credential is None:
-        _credential = DefaultAzureCredential()
+        _credential = AzureCliCredential(process_timeout=30)
     return _credential.get_token(_AAD_SCOPE).token
 
 
@@ -67,7 +67,7 @@ class RealtimeSTT:
         if settings.aoai_key:
             headers = {"api-key": settings.aoai_key}
         else:
-            # No API key → authenticate with Entra ID (DefaultAzureCredential)
+            # No API key → authenticate with Entra ID (AzureCliCredential)
             token = await asyncio.to_thread(_get_aad_token)
             headers = {"Authorization": f"Bearer {token}"}
             log.info("[STT %s] using Entra ID (no api-key)", self.channel)

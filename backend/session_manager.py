@@ -19,6 +19,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import uuid
 from typing import Dict, Optional
 
 from fastapi import WebSocket
@@ -130,7 +131,13 @@ class ConversationSession:
             "[conv %s] FINAL turn #%d (%s): %r",
             self.conversation_id, len(self.turns), channel, text,
         )
-        turn_id = await cosmos_store.save_turn(self.conversation_id, channel, text)
+        # Persist the turn fire-and-forget so the Foundry call below is not
+        # blocked by the Cosmos round-trip. The id is generated locally so we
+        # can pass it to the suggestion doc immediately.
+        turn_id = str(uuid.uuid4())
+        asyncio.create_task(
+            cosmos_store.save_turn(self.conversation_id, channel, text, turn_id)
+        )
         # Trigger Foundry only on customer final turns
         if channel == "customer":
             # Build a labeled block with every turn that hasn't been sent to
