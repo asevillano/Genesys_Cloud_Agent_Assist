@@ -5,10 +5,10 @@ import asyncio
 import logging
 from typing import List, Tuple
 
-from azure.identity import AzureCliCredential, get_bearer_token_provider
+from azure.identity import get_bearer_token_provider
 from openai import AzureOpenAI
 
-from .config import settings
+from .config import get_credential, settings
 
 log = logging.getLogger(__name__)
 
@@ -28,9 +28,9 @@ def _get_client() -> AzureOpenAI | None:
             api_version=settings.aoai_api_version,
         )
     else:
-        log.info("No AZURE_OPENAI_API_KEY set — using AzureCliCredential for Azure OpenAI.")
+        log.info("No AZURE_OPENAI_API_KEY set — using AAD credential for Azure OpenAI.")
         token_provider = get_bearer_token_provider(
-            AzureCliCredential(process_timeout=30),
+            get_credential(),
             "https://cognitiveservices.azure.com/.default",
         )
         _client = AzureOpenAI(

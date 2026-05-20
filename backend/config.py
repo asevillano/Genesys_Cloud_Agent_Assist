@@ -54,3 +54,20 @@ class Settings:
 
 
 settings = Settings()
+
+
+def get_credential():
+    """Return the Azure credential appropriate for the current environment.
+
+    In Azure (Container Apps / VMs / etc.) the user-assigned managed identity's
+    client id is injected via the ``AZURE_CLIENT_ID`` environment variable —
+    use ``ManagedIdentityCredential`` directly to avoid the slow probing chain.
+    Locally fall back to ``AzureCliCredential`` (``az login``) which is fast
+    and predictable on developer machines.
+    """
+    client_id = os.getenv("AZURE_CLIENT_ID")
+    if client_id:
+        from azure.identity import ManagedIdentityCredential
+        return ManagedIdentityCredential(client_id=client_id)
+    from azure.identity import AzureCliCredential
+    return AzureCliCredential(process_timeout=30)

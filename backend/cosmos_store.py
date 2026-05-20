@@ -46,9 +46,9 @@ def init() -> None:
         if settings.cosmos_key:
             _client = CosmosClient(settings.cosmos_endpoint, credential=settings.cosmos_key)
         else:
-            from azure.identity import AzureCliCredential
-            log.info("No COSMOS_KEY set — using AzureCliCredential for Cosmos DB.")
-            _client = CosmosClient(settings.cosmos_endpoint, credential=AzureCliCredential(process_timeout=30))
+            from .config import get_credential
+            log.info("No COSMOS_KEY set — using AAD credential for Cosmos DB.")
+            _client = CosmosClient(settings.cosmos_endpoint, credential=get_credential())
         db = _client.create_database_if_not_exists(id=settings.cosmos_database)
         _container = db.create_container_if_not_exists(
             id=settings.cosmos_container,

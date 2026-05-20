@@ -109,6 +109,11 @@ async def favicon() -> Response:
     return Response(status_code=204)
 
 
+@app.get("/health", include_in_schema=False)
+async def health() -> dict:
+    return {"status": "ok"}
+
+
 # ───────────────────────── REST API ──────────────────────
 @app.get("/api/config")
 async def api_config() -> dict:

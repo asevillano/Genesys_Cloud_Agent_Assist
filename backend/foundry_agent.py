@@ -17,9 +17,8 @@ import logging
 from typing import Awaitable, Callable, Optional
 
 from azure.ai.projects import AIProjectClient
-from azure.identity import AzureCliCredential
 
-from .config import settings
+from .config import get_credential, settings
 
 log = logging.getLogger(__name__)
 
@@ -35,7 +34,7 @@ class FoundryAgentClient:
             raise RuntimeError("PROJECT_ENDPOINT is not configured.")
         self._project = AIProjectClient(
             endpoint=settings.project_endpoint,
-            credential=AzureCliCredential(process_timeout=30),
+            credential=get_credential(),
         )
         # The OpenAI client returned here is already wired to the Foundry
         # project endpoint and uses the same AAD credential.

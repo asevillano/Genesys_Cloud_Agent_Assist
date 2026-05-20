@@ -14,20 +14,19 @@ import logging
 from typing import Awaitable, Callable, Optional
 
 import websockets
-from azure.identity import AzureCliCredential
 
-from .config import settings
+from .config import get_credential, settings
 
 log = logging.getLogger(__name__)
 
 _AAD_SCOPE = "https://cognitiveservices.azure.com/.default"
-_credential: AzureCliCredential | None = None
+_credential = None
 
 
 def _get_aad_token() -> str:
     global _credential
     if _credential is None:
-        _credential = AzureCliCredential(process_timeout=30)
+        _credential = get_credential()
     return _credential.get_token(_AAD_SCOPE).token
 
 
